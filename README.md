@@ -21,4 +21,4 @@ this script uses an LLM to create an additional sentence in the original text sa
 
 &nbsp;&nbsp;&nbsp;&nbsp;📜 synonym-replacer.py  
 this script identifies the 10 rarest words in each text sample using the wikipedia word frequency list, an LLM replaces 5 of those words in the text sample with synonyms, and the claimed author should be able to find the synonyms and identify the original word choices.   
-*requires weasyprint, nltk, wiki_freq.txt (included), and a deepseek API key (compatible with other OpenAI format LLM APIs)
+*requires weasyprint, wiki_freq.txt (included), and a deepseek API key (compatible with other OpenAI format LLM APIs)
