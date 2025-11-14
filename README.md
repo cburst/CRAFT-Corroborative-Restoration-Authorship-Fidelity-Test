@@ -19,6 +19,14 @@ this script uses an LLM to create two plausible decoy sentences for the 5 longes
 this script uses an LLM to create an additional sentence in the original text sample, and the claimed author should be able to identify the impostor sentence.   
 *requires weasyprint, nltk, and a deepseek API key (compatible with other OpenAI format LLM APIs)
 
+&nbsp;&nbsp;&nbsp;&nbsp;📜 sentence-intruders.py  
+this script uses an LLM to create additional sentences in the original text sample, the sentence order is shuffled, and the claimed author should be able to identify the impostor sentences.   
+*requires weasyprint, nltk, and a deepseek API key (compatible with other OpenAI format LLM APIs)
+
 &nbsp;&nbsp;&nbsp;&nbsp;📜 synonym-replacer.py  
 this script identifies the 10 rarest words in each text sample using the wikipedia word frequency list, an LLM replaces 5 of those words in the text sample with synonyms, and the claimed author should be able to find the synonyms and identify the original word choices.   
 *requires weasyprint, wiki_freq.txt (included), and a deepseek API key (compatible with other OpenAI format LLM APIs)
+
+&nbsp;&nbsp;&nbsp;&nbsp;📜 summary-recognizer.py  
+this script identifiesuses an LLM to create an accurate summary of the original text, as well as two summaries with minor detail changes, and the claimed author should be able to find the accuracy summar.   
+*requires weasyprint and a deepseek API key (compatible with other OpenAI format LLM APIs)
