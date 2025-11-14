@@ -27,7 +27,7 @@ PDF_DIR = "PDFs"
 ANSWER_KEY = "answer_key_sentence_intruders.tsv"
 
 # 🔑 Put your DeepSeek API key here
-DEEPSEEK_API_KEY = "sk-c0430c4f491d4d52b4e5d2b027169918"
+DEEPSEEK_API_KEY = "your_deepseek_api_key_here"
 
 DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 DEEPSEEK_MODEL = "deepseek-chat"
