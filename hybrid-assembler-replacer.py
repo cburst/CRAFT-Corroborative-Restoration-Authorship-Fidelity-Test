@@ -168,7 +168,7 @@ def expand_block(sentences, idx_longest):
     # Expand until >= 20 tokens or exhausted
     while True:
         tokens_now = block_tokens_now()
-        if len(tokens_now) >= 20:
+        if len(tokens_now) >= 10:
             break
 
         expanded = False
@@ -271,7 +271,7 @@ def compute_block_info(text):
 
     block_text, block_tokens, block_indices = expand_block(sentences, idx_longest)
 
-    removed_positions = select_best_window(block_tokens, window=20)
+    removed_positions = select_best_window(block_tokens, window=10)
     removed_words = [block_tokens[i] for i in removed_positions]
 
     # All word TYPES in the block sentences (for synonym exclusion)
@@ -593,10 +593,10 @@ def build_word_grid(words):
     Words are lowercased and sorted; empty strings pad to 20 items.
     """
     words = sorted([w.lower() for w in words])
-    while len(words) < 20:
+    while len(words) < 10:
         words.append("")
-    # 5 rows × 4 columns
-    return [words[i*4:(i+1)*4] for i in range(5)]
+    words = words[:10]
+    return [words[i*2:(i+1)*2] for i in range(5)]
 
 # -----------------------------------------------------------
 # PDF generation (hybrid layout)

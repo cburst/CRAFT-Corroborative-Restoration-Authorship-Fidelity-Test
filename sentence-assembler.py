@@ -70,7 +70,7 @@ def expand_block(sentences, idx_longest):
     # Expand until enough tokens (or exhaustion)
     while True:
         tokens_now = block_tokens()
-        if len(tokens_now) >= 20:
+        if len(tokens_now) >= 10:
             break
 
         expanded = False
@@ -198,7 +198,7 @@ def transform_longest_sentence(text, longest_sentence):
     block_text, block_tokens = expand_block(sentences, idx_longest)
 
     # 2. Select best 20-word window across entire block
-    removed_positions = select_best_window(block_tokens, window=20)
+    removed_positions = select_best_window(block_tokens, window=10)
 
     # 3. Replace window tokens with invisible blanks
     modified_block = replace_tokens_with_blanks_in_block(
@@ -222,9 +222,10 @@ def transform_longest_sentence(text, longest_sentence):
 
 def build_word_grid(words):
     words = sorted([w.lower() for w in words])
-    while len(words) < 20:
+    while len(words) < 10:
         words.append("")
-    return [words[i*5:(i+1)*5] for i in range(4)]
+    words = words[:10]
+    return [words[i*2:(i+1)*2] for i in range(5)]
 
 def generate_pdf(student_id, name, full_text_modified, grid, out_dir="PDFs-sentence-assembly"):
     os.makedirs(out_dir, exist_ok=True)
