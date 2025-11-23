@@ -233,8 +233,8 @@ def generate_pdf_for_student(student_id, name, sentences, num_intruders, out_dir
         ".text { white-space: pre-wrap; margin: 0.3em 0; }",
         "</style></head><body>",
 
-        f"<div class='header'>Name: {esc_name}<br>Student Number: {esc_id}<br>Hybrid Reorder Sentences & Sentence Intruders</div>",
-        f"<div class='text'><b>{num_intruders} extra {plural}</b> sentences have been added to your text.<br>Find the numbers of the added sentences and provide the correct order of the original sentences.<br><br></div>",
+        f"<div class='header'>Name: {esc_name}<br>Student Number: {esc_id}<br>Sentences Added & Sentence Order</div>",
+        f"<div class='text'><b>{num_intruders} extra {plural} sentences have been added to your text.<br>Find the added sentences and provide the correct order of the original sentences.</b><br><br></div>",
     ]
 
     for i, sent in enumerate(sentences, start=1):
@@ -244,7 +244,7 @@ def generate_pdf_for_student(student_id, name, sentences, num_intruders, out_dir
     # Two lines of underscores at the bottom
     html_parts.append("<br>")
     html_parts.append("<div class='text'><b>Added Sentences:</b> _______________________________________</div>")
-    html_parts.append("<div class='text'><b>Original Sentence Order:</b> ________________________________</div>")
+    html_parts.append("<div class='text'><b>Original Sentence Order:</b> _________________________________</div>")
 
     html_parts.append("</body></html>")
     html_doc = "\n".join(html_parts)

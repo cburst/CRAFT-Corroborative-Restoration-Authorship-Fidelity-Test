@@ -615,7 +615,7 @@ def generate_hybrid_pdf(student_id, name, final_text, removed_words, replacement
     # Dynamic font size for word bank
     # -----------------------------
     base_font_size = 12  # starting point
-    reference_word = "paragraphs"
+    reference_word = "paragraphsparagraphs"
     ref_len = len(reference_word)  # 10
     longest_len = max((len(w) for w in removed_words if w), default=0)
 
