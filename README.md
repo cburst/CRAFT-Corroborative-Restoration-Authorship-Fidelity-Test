@@ -2,7 +2,7 @@
 🧾 each script starts with a students.tsv file that contains student numbers, student names, and text columns.
 🧾 each script generates student test PDFs and answer key(s).
 
-**bold text**hybrid tests**bold text**  
+**hybrid tests**  
 &nbsp;&nbsp;&nbsp;&nbsp;📜 hybrid-intruders.py  
 this script uses an LLM to create additional sentences in the original text sample, and the claimed author should be able to identify the impostor sentences.  
 this script also shuffles sentences in the original text sample, and the claimed author should be able to recorder the original sentences.   
@@ -14,7 +14,7 @@ this script also removes a 10-word block from the original text sample, puts tho
 *requires weasyprint, wiki_freq.txt (included), and a deepseek API key (compatible with other OpenAI format LLM APIs)
 
 
-**bold text**standalone tests**bold text**  
+**standalone tests**  
 &nbsp;&nbsp;&nbsp;&nbsp;📜 hybrid-assembler-replacer.py  
 this script removes a 20-word block from the original text sample, puts those words into an alphabetized word bank, and the claimed author should be able to reassemble the original block.   
 *requires weasyprint
@@ -47,11 +47,10 @@ this script uses an LLM to create additional sentences in the original text samp
 this script identifies the 10 rarest words in each text sample using the wikipedia word frequency list, an LLM replaces 5 of those words in the text sample with synonyms, and the claimed author should be able to find the synonyms and identify the original word choices.   
 *requires weasyprint, wiki_freq.txt (included), and a deepseek API key (compatible with other OpenAI format LLM APIs)
 
-**bold text**example pipeline script**bold text**
-📜 test_pipeline.py  
-example python pipeline for organizing and merging pdf test files and answer keys created to facilitate the creation of a double-sided single page test for each student
-
-
 &nbsp;&nbsp;&nbsp;&nbsp;📜 summary-recognizer.py  
 this script identifiesuses an LLM to create an accurate summary of the original text, as well as two summaries with minor detail changes, and the claimed author should be able to find the accuracy summar.   
 *requires weasyprint and a deepseek API key (compatible with other OpenAI format LLM APIs)
+
+**pipeline script**
+📜 test_pipeline.py  
+example python pipeline for organizing and merging pdf test files and answer keys created to facilitate the creation of a double-sided single page test for each student
