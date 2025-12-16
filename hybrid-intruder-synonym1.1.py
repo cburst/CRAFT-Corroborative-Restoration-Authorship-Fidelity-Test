@@ -290,61 +290,39 @@ def find_sentence_and_surface_word(text, word_lower):
     return None, None
 
 
-def get_synonym_from_deepseek(surface_word, sentence, all_words_in_text, freq_ranks):
+def get_synonym_from_deepseek(surface_word, sentence, all_words_in_text):
     """
-    DeepSeek synonym generator with FULL diagnostic logging.
-
-    Enforces:
-      - lowercase only
-      - EXACTLY one unhyphenated alphabetic word
-      - POS & inflection matching (prompt-level)
-      - sufficiently different from original (Levenshtein)
-      - sufficiently different from all other words in text
-      - NOT substantially more obscure than original (frequency-rank controlled)
-
-    Prints:
-      - every attempt
-      - raw DeepSeek output
-      - frequency ranks
-      - explicit rejection reason
-      - explicit acceptance
+    DeepSeek synonym generator with:
+      - lowercase-only rule
+      - Levenshtein > 50% difference from original
+      - Levenshtein sufficiently different from *every other word* in text
+      - retries
     """
 
     if not DEEPSEEK_API_KEY:
-        print(f"⚠️ No API key; skipping synonym for '{surface_word}'")
+        print("⚠️ DeepSeek API key not set; skipping synonym for", surface_word)
         return None
 
-    # ---- skip capitalized originals ----
+    # Capitalization rule: skip words with capitals
     if any(c.isupper() for c in surface_word):
-        print(f"⚠️ Skipping '{surface_word}' — contains uppercase letters.")
+        print(f"⚠️ Skipping '{surface_word}' — contains capital letters.")
         return None
-
-    surface_lower = surface_word.lower()
-    original_rank = freq_ranks.get(surface_lower, 10**9)
-
-    # ---- obscurity control (loosened but safe) ----
-    MAX_MULTIPLIER = 6
-    MAX_ABSOLUTE_DELTA = 15000
-    max_allowed_rank = max(
-        original_rank * MAX_MULTIPLIER,
-        original_rank + MAX_ABSOLUTE_DELTA
-    )
 
     system_prompt = (
         "You are a precise thesaurus assistant. Given an English word as it appears "
         "inside a sentence, produce exactly one lowercase synonym that can replace "
-        "the original word.\n\n"
+        "the original word WITHOUT ANY CAPITAL LETTERS.\n\n"
         "Requirements:\n"
-        "1) lowercase only\n"
-        "2) same part of speech and inflection\n"
-        "3) similar or slightly higher difficulty, but not much harder\n"
-        "4) output ONLY the word\n"
-        "5) if unsure, repeat the original word"
+        "1) Synonym must be lowercase only.\n"
+        "2) Must match part of speech and inflection.\n"
+        "3) Respond with ONLY the replacement word.\n"
+        "4) If no good synonym exists, repeat the original word."
     )
 
     user_prompt = (
         f"Sentence:\n{sentence}\n\n"
-        f"Original word: {surface_word}"
+        f"Original word: {surface_word}\n\n"
+        "Return a single-word lowercase synonym."
     )
 
     headers = {
@@ -359,14 +337,16 @@ def get_synonym_from_deepseek(surface_word, sentence, all_words_in_text, freq_ra
             {"role": "user", "content": user_prompt},
         ],
         "max_tokens": 20,
-        "temperature": 0.45,
+        "temperature": 0.5,
     }
 
-    original_threshold = max(1, len(surface_lower) // 2)
+    surface_lower = surface_word.lower()
+    attempt = 0
+    original_threshold = max(1, len(surface_lower) // 2)  # too-similar threshold
 
-    for attempt in range(1, DEEPSEEK_MAX_RETRIES + 1):
+    while attempt < DEEPSEEK_MAX_RETRIES:
         print("\n----------------------------")
-        print(f"🔍 DeepSeek synonym attempt {attempt} for '{surface_word}'")
+        print(f"DeepSeek synonym lookup for '{surface_word}' (attempt {attempt+1})")
         print("Sentence:", sentence)
 
         try:
@@ -374,74 +354,76 @@ def get_synonym_from_deepseek(surface_word, sentence, all_words_in_text, freq_ra
 
             if resp.status_code >= 400:
                 print(f"⚠️ HTTP {resp.status_code}: {resp.text}")
+                attempt += 1
                 continue
 
-            raw = resp.json()["choices"][0]["message"]["content"].strip()
-            print("🧠 DeepSeek raw output:", raw)
+            data = resp.json()
+            candidate = data["choices"][0]["message"]["content"].strip()
 
-            candidate = raw.strip("'\"").strip().lower()
+            print("DeepSeek raw content:", candidate)
+            print("----------------------------")
 
-            # ---- must be EXACTLY one alphabetic word ----
-            if not re.fullmatch(r"[a-z]+", candidate):
-                print("❌ Rejected — synonym must be a single unhyphenated word.")
+            # unwrap possible quotes
+            if candidate.startswith(("'", '"')) and candidate.endswith(("'", '"')):
+                candidate = candidate[1:-1].strip()
+
+            tokens = re.findall(r"[A-Za-z]+", candidate)
+            if not tokens:
+                attempt += 1
                 continue
 
-            synonym = candidate
+            synonym = tokens[0].lower()
 
-            # ---- identical ----
+            # Reject uppercase
+            if any(c.isupper() for c in synonym):
+                print(f"⚠️ Rejected '{synonym}' — contains capitals.")
+                attempt += 1
+                continue
+
+            # Reject identical
             if synonym == surface_lower:
-                print("❌ Rejected — identical to original.")
+                print(f"⚠️ Rejected '{synonym}' — same as original.")
+                attempt += 1
                 continue
 
-            # ---- obscurity check ----
-            syn_rank = freq_ranks.get(synonym, 10**9)
-            print(
-                f"📊 Frequency ranks — original: {original_rank}, "
-                f"candidate: {syn_rank}, "
-                f"max allowed: {max_allowed_rank}"
-            )
-
-            if syn_rank > max_allowed_rank:
-                print("❌ Rejected — synonym too obscure relative to original.")
-                continue
-
-            # ---- similarity to original ----
+            # Reject too similar to original
             dist_orig = levenshtein(surface_lower, synonym)
             if dist_orig <= original_threshold:
-                print(
-                    f"❌ Rejected — too similar to original "
-                    f"(dist={dist_orig}, threshold={original_threshold})"
-                )
+                print(f"⚠️ '{synonym}' too similar to '{surface_lower}' "
+                      f"(dist={dist_orig}, threshold={original_threshold})")
+                attempt += 1
                 continue
 
-            # ---- similarity to other words in text ----
+            # Reject too similar to any other word in text
             conflict = False
             for w in all_words_in_text:
                 if w == surface_lower:
                     continue
-                threshold_other = max(1, int(len(w) * 0.30))
+                threshold_other = max(1, int(len(w) * 0.30))  # 30% threshold
                 dist_other = levenshtein(w, synonym)
                 if dist_other <= threshold_other:
                     print(
-                        f"❌ Rejected — too similar to existing word '{w}' "
+                        f"⚠️ '{synonym}' rejected — too similar to '{w}' in text "
                         f"(dist={dist_other}, threshold={threshold_other})"
                     )
                     conflict = True
                     break
 
             if conflict:
+                attempt += 1
                 continue
 
-            # ---- ACCEPT ----
-            print(f"✅ Accepted synonym for '{surface_word}': {synonym}")
+            # Accept
+            print(f"✓ Accepted synonym for '{surface_word}': {synonym}")
             return synonym
 
         except Exception as e:
-            print(f"⚠️ DeepSeek error on attempt {attempt}: {e}")
+            print(f"⚠️ DeepSeek error: {e}")
+            attempt += 1
 
-    print(f"⚠️ No suitable synonym found for '{surface_word}' after retries.")
+    print(f"⚠️ No suitable synonym for '{surface_word}' after retries.")
     return None
-    
+
 def get_pos_from_deepseek(surface_word, sentence):
     """
     Ask DeepSeek for the part of speech of a word *as used in the given sentence*.
@@ -556,7 +538,7 @@ def transform_text_with_synonyms(text, freq_ranks):
             continue
 
         # --- (A) SYNONYM GENERATION ---
-        synonym = get_synonym_from_deepseek(surface_word, sentence, all_words, freq_ranks)
+        synonym = get_synonym_from_deepseek(surface_word, sentence, all_words)
         if not synonym:
             continue
 
@@ -585,168 +567,97 @@ def transform_text_with_synonyms(text, freq_ranks):
 
 def generate_intruder_sentence(essay_section_sentences, existing_sentences, intruder_index):
     """
-    Generate one plausible intruder sentence with:
-      - upward-biased generation (toward upper word-count bound)
-      - slightly loosened length floor
-      - asymmetric content-ratio constraint (low punished, high allowed)
-      - primary + fallback prompts
-
-    Logs:
-      - attempt number
-      - prompt type
-      - preview
-      - word count
-      - content ratio
-      - acceptance or explicit rejection reason
+    Use DeepSeek to generate one plausible intruder sentence
+    based on a section of the essay, with safeguards to ensure:
+      - no duplicates
+      - no shared surface openers or comma-phrases across intruders
     """
 
     if not DEEPSEEK_API_KEY:
-        print(f"⚠️ Intruder {intruder_index}: no API key; using fallback sentence.")
+        print("⚠️ DeepSeek API key not set; using fallback intruder sentence.")
         return "This sentence relates to the topic but is not from the original essay."
 
-    # ---------- section statistics ----------
-    lengths, densities = [], []
-    for s in essay_section_sentences:
-        tokens = tokenize_words_lower(s)
-        if not tokens:
-            continue
-        lengths.append(len(tokens))
-        content = [t for t in tokens if t not in STOPWORDS]
-        densities.append(len(content) / len(tokens))
+    system_prompt = (
+        "You are a careful writing assistant. Given a section of a student's essay, "
+        "write one plausible standalone sentence that matches the student's stylistic level "
+        "(non-native academic), topic, and tone.\n\n"
+        "Requirements:\n"
+        "1) It should sound like it could appear anywhere in the essay.\n"
+        "2) It should be most influenced by the CHARACTERISTICS of THIS SECTION.\n"
+        "3) 10–30 words.\n"
+        "4) Must NOT duplicate any existing sentence.\n"
+        "5) Avoid obvious discourse markers like 'Additionally,' 'Moreover,' or 'In conclusion.'\n"
+        "6) Output one sentence only, no commentary."
+    )
 
-    avg_len = int(sum(lengths) / max(1, len(lengths)))
-    avg_density = sum(densities) / max(1, len(densities))
-
-    # ---------- length & density controls ----------
-    CONTENT_RATIO_TOLERANCE = 0.15
-    min_density = max(0.0, avg_density - CONTENT_RATIO_TOLERANCE)
-
-    # slightly loosened lower bound; upper bound unchanged
-    min_len_1 = max(6, int(avg_len * 0.85))   # was 0.90
-    max_len_1 = int(avg_len * 1.15)
-
-    min_len_2 = max(6, int(avg_len * 0.80))   # fallback slightly wider
-    max_len_2 = int(avg_len * 1.20)
-
-    prompts = [
-        {
-            "label": "primary",
-            "min_len": min_len_1,
-            "max_len": max_len_1,
-            "system": (
-                "You are a careful academic writing assistant.\n\n"
-                "Write ONE detailed sentence that could appear in this essay section.\n\n"
-                f"Requirements:\n"
-                f"1) {min_len_1}–{max_len_1} words "
-                f"(aim for the UPPER end of this range)\n"
-                "2) Similar academic level and amount of detail\n"
-                "3) May introduce ONE concrete supporting detail if needed\n"
-                "4) Avoid discourse markers (e.g., moreover, additionally)\n"
-                "5) Do NOT repeat or closely paraphrase any existing sentence\n"
-                "6) Output ONE sentence only"
-            )
-        },
-        {
-            "label": "fallback",
-            "min_len": min_len_2,
-            "max_len": max_len_2,
-            "system": (
-                "You are a careful academic writing assistant.\n\n"
-                "Write ONE detailed academic sentence related to this essay section, "
-                "with substantial informational content.\n\n"
-                f"Requirements:\n"
-                f"1) {min_len_2}–{max_len_2} words "
-                f"(aim for approximately {max_len_2} words)\n"
-                "2) Comparable or slightly higher informational density than the section\n"
-                "3) You MAY reframe an idea or add a small contextual detail\n"
-                "4) Avoid generic filler or discourse markers\n"
-                "5) Do NOT repeat any existing sentence\n"
-                "6) Output ONE sentence only"
-            )
-        }
-    ]
+    user_prompt = (
+        "Here is one section of the student's essay, representing one part of the essay's topic/style:\n\n"
+        f"{' '.join(essay_section_sentences)}\n\n"
+        "Write one plausible standalone sentence that matches the STYLE and CONTENT CHARACTERISTICS of THIS SECTION."
+    )
 
     headers = {
         "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
         "Content-Type": "application/json",
     }
 
+    payload = {
+        "model": DEEPSEEK_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "max_tokens": 200,
+        "temperature": 0.8,
+    }
+
     existing_norms = {normalize_sentence(s) for s in existing_sentences}
+    attempt = 1
 
-    for prompt_cfg in prompts:
-        if prompt_cfg["label"] == "fallback":
-            print(f"\n🔁 Switching to fallback intruder prompt for section {intruder_index}")
+    while attempt <= DEEPSEEK_INTRUDER_MAX_RETRIES:
+        try:
+            print(f"→ Intruder {intruder_index}, attempt {attempt}")
 
-        payload = {
-            "model": DEEPSEEK_MODEL,
-            "messages": [
-                {"role": "system", "content": prompt_cfg["system"]},
-                {
-                    "role": "user",
-                    "content": "Essay section:\n" + " ".join(essay_section_sentences)
-                },
-            ],
-            "max_tokens": 220,
-            "temperature": 0.75,
-        }
+            resp = requests.post(DEEPSEEK_URL, headers=headers, json=payload, timeout=30)
+            if resp.status_code >= 400:
+                print(f"⚠️ HTTP {resp.status_code}: {resp.text}")
+                attempt += 1
+                time.sleep(attempt)
+                continue
 
-        for attempt in range(1, DEEPSEEK_INTRUDER_MAX_RETRIES + 1):
-            print("\n----------------------------")
-            print(
-                f"🔍 DeepSeek intruder attempt {attempt} "
-                f"for section {intruder_index} ({prompt_cfg['label']})"
-            )
+            data = resp.json()
+            content = data["choices"][0]["message"]["content"].strip()
+            candidate = content.strip("'\"")
+            norm = normalize_sentence(candidate)
 
-            try:
-                resp = requests.post(DEEPSEEK_URL, headers=headers, json=payload, timeout=30)
-                raw = resp.json()["choices"][0]["message"]["content"].strip()
-                candidate = raw.strip("'\"")
+            # ---------- BASIC VALIDATION ----------
+            if not norm:
+                print(f"⚠️ Intruder {intruder_index}: empty result; retrying…")
+                attempt += 1
+                time.sleep(attempt)
+                continue
 
-                tokens = tokenize_words_lower(candidate)
-                if not tokens:
-                    print("❌ Rejected — empty or non-tokenizable output.")
-                    continue
+            if norm in existing_norms:
+                print(f"⚠️ Intruder {intruder_index}: duplicate sentence; retrying…")
+                attempt += 1
+                time.sleep(attempt)
+                continue
 
-                wc = len(tokens)
-                content_wc = sum(1 for t in tokens if t not in STOPWORDS)
-                density = content_wc / wc
+            # ---------- SURFACE-FORM SIMILARITY GUARD ----------
+            if intruder_too_similar(candidate, existing_sentences):
+                print(f"⚠️ Intruder {intruder_index}: stylistically too similar; retrying…")
+                attempt += 1
+                time.sleep(attempt)
+                continue
 
-                preview = " ".join(candidate.split()[:6])
-                if len(candidate.split()) > 6:
-                    preview += "…"
+            print(f"✓ Intruder {intruder_index} accepted after {attempt} attempt(s): {candidate}")
+            return candidate
 
-                print(f"✂️ Preview: \"{preview}\"")
-                print(
-                    f"📏 Word count: {wc} "
-                    f"(target {prompt_cfg['min_len']}–{prompt_cfg['max_len']})\n"
-                    f"📊 Content ratio: {density:.2f} "
-                    f"(min {min_density:.2f}, section avg ≈ {avg_density:.2f})"
-                )
+        except Exception as e:
+            print(f"⚠️ Intruder {intruder_index}: DeepSeek error: {e}")
+            attempt += 1
+            time.sleep(attempt)
 
-                if wc < prompt_cfg["min_len"] or wc > prompt_cfg["max_len"]:
-                    print("❌ Rejected — length out of range.")
-                    continue
-
-                if density < min_density:
-                    print("❌ Rejected — content ratio too low.")
-                    continue
-
-                norm = normalize_sentence(candidate)
-                if norm in existing_norms:
-                    print("❌ Rejected — duplicate of existing sentence.")
-                    continue
-
-                if intruder_too_similar(candidate, existing_sentences):
-                    print("❌ Rejected — surface similarity to existing sentence.")
-                    continue
-
-                print(f"✅ Accepted intruder for section {intruder_index} ({prompt_cfg['label']})")
-                return candidate
-
-            except Exception as e:
-                print(f"⚠️ Intruder error: {e}")
-
-    print(f"⚠️ No suitable intruder found for section {intruder_index}; using fallback sentence.")
     return "This sentence relates to the topic but is not from the original essay."
 
 
